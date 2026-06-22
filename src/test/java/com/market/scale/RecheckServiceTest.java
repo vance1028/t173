@@ -6,6 +6,7 @@ import com.market.scale.entity.RecheckRecord;
 import com.market.scale.entity.Stall;
 import com.market.scale.mapper.RecheckRecordMapper;
 import com.market.scale.mapper.StallMapper;
+import com.market.scale.service.CreditEventService;
 import com.market.scale.service.RecheckService;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +18,8 @@ class RecheckServiceTest {
 
     private final RecheckRecordMapper recheckMapper = mock(RecheckRecordMapper.class);
     private final StallMapper stallMapper = mock(StallMapper.class);
-    private final RecheckService service = new RecheckService(recheckMapper, stallMapper);
+    private final CreditEventService creditEventService = mock(CreditEventService.class);
+    private final RecheckService service = new RecheckService(recheckMapper, stallMapper, creditEventService);
 
     private RecheckRequest req(int claimed, int actual) {
         RecheckRequest r = new RecheckRequest();
@@ -35,6 +37,7 @@ class RecheckServiceTest {
         assertEquals(120, rec.getShortageG());
         assertEquals("shortage", rec.getResult());
         verify(recheckMapper).insert(any(RecheckRecord.class));
+        verify(creditEventService).recordEvent(any());
     }
 
     @Test
@@ -43,6 +46,7 @@ class RecheckServiceTest {
         RecheckRecord rec = service.create(req(1000, 1000));
         assertEquals(0, rec.getShortageG());
         assertEquals("pass", rec.getResult());
+        verify(creditEventService).recordEvent(any());
     }
 
     @Test

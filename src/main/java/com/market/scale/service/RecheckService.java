@@ -1,10 +1,12 @@
 package com.market.scale.service;
 
 import com.market.scale.common.ApiException;
+import com.market.scale.dto.CreditEventRequest;
 import com.market.scale.dto.RecheckRequest;
 import com.market.scale.entity.RecheckRecord;
 import com.market.scale.mapper.RecheckRecordMapper;
 import com.market.scale.mapper.StallMapper;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -17,10 +19,13 @@ public class RecheckService {
 
     private final RecheckRecordMapper recheckMapper;
     private final StallMapper stallMapper;
+    private final CreditEventService creditEventService;
 
-    public RecheckService(RecheckRecordMapper recheckMapper, StallMapper stallMapper) {
+    public RecheckService(RecheckRecordMapper recheckMapper, StallMapper stallMapper,
+                          @Lazy CreditEventService creditEventService) {
         this.recheckMapper = recheckMapper;
         this.stallMapper = stallMapper;
+        this.creditEventService = creditEventService;
     }
 
     public Map<String, Object> page(Long stallId, String result, int page, int size) {
@@ -55,6 +60,34 @@ public class RecheckService {
         rec.setRemark(req.getRemark());
         rec.setRecheckedAt(LocalDateTime.now());
         recheckMapper.insert(rec);
+
+        if (shortage > 0) {
+            int shortagePercent = (int) Math.round(shortage * 100.0 / req.getClaimedWeightG());
+            String severity;
+            if (shortagePercent >= 20) severity = "serious";
+            else if (shortagePercent >= 10) severity = "normal";
+            else severity = "mild";
+
+            CreditEventRequest eventReq = new CreditEventRequest();
+            eventReq.setStallId(req.getStallId());
+            eventReq.setEventType("RECHECK_SHORTAGE");
+            eventReq.setSeverity(severity);
+            eventReq.setMagnitudeValue(shortagePercent);
+            eventReq.setSourceTable("recheck_records");
+            eventReq.setSourceId(rec.getId());
+            eventReq.setDescription(String.format("复称短缺: %s 短缺%d克(%.1f%%)",
+                req.getCommodity(), shortage, shortage * 100.0 / req.getClaimedWeightG()));
+            creditEventService.recordEvent(eventReq);
+        } else {
+            CreditEventRequest eventReq = new CreditEventRequest();
+            eventReq.setStallId(req.getStallId());
+            eventReq.setEventType("INSPECTION_PASS");
+            eventReq.setSourceTable("recheck_records");
+            eventReq.setSourceId(rec.getId());
+            eventReq.setDescription(String.format("复称合格: %s", req.getCommodity()));
+            creditEventService.recordEvent(eventReq);
+        }
+
         return rec;
     }
 }
